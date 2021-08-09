@@ -11,22 +11,67 @@ import argparse
 import webbrowser
 import os
 
+import retrodetect
+
 parser = argparse.ArgumentParser(description='Provide simple interface to label bee images')
 parser.add_argument('--imgpath',required=True,type=str,help='Path to images')
 parser.add_argument('--labelfile',required=True,type=str,help='File to save labels to, e.g. "labels_photos_June20.csv"')
+#parser.add_argument('--initial',required=False,type=int,help='Initial image index')
+parser.add_argument('--port',required=False,type=int,help='Port')
 args = parser.parse_args()
 webbrowser.open("file://" + os.path.realpath('index.html'),new=2)
 
 pathtoimgs = args.imgpath #'/home/mike/Documents/Research/bee/photos2020/photos_June20'
 label_data_file = args.labelfile #"labels_photos_June20.csv"
+if 'port' in args: 
+    port = args.port
+else:
+    port = 5000
+
 
 def getimgfilename(number):
     fns = sorted(glob('%s/*.np'%(pathtoimgs)))
     return fns[number]
+
+@app.route('/detect/<int:number>')
+def detect(number):
+    print("---------------------------------")
+    photo_list = []
+    print(number)
+    for n in range(number-10,number+2):
+        print(n)
+        if n<0: continue
+        fn = getimgfilename(n)
+        print(fn)
+        try:
+            photoitem = np.load(fn,allow_pickle=True) 
+        except OSError:
+            continue #skip this one if we can't access it
+        if photoitem is not None:
+            if photoitem['img'] is not None:
+                photoitem['img'] = photoitem['img'].astype(np.float16)
+        photo_list.append(photoitem)
+    contact, found, _ = retrodetect.detectcontact(photo_list,len(photo_list)-1,Npatches=50,delsize=5,blocksize=3)
+    newcontact = []
+    if contact is not None:
+        for c in contact:
+            c['patch']=c['patch'].tolist() #makes it jsonable
+            c['searchpatch']=c['searchpatch'].tolist() #makes it jsonable
+            c['mean']=float(c['mean'])
+            c['searchmax']=float(c['searchmax'])
+            c['centremax']=float(c['centremax'])
+            c['x']=int(c['x'])
+            c['y']=int(c['y'])
+            newcontact.append(c)
+    return jsonify({'contact':newcontact, 'found':found})
     
 @app.route('/')
 def hello_world():
     return 'root node of bee label API.'
+
+@app.route('/filename/<int:number>')
+def filename(number):
+    return jsonify(getimgfilename(number))
 
 @app.route('/configure/<string:path>')
 def configure(path):
@@ -55,7 +100,11 @@ def getimage(number,x1,y1,x2,y2):
     #    return "Image not found"
     fn = getimgfilename(number)
     print(fn)
-    rawdata = np.load(fn,allow_pickle=True)
+    try:
+        rawdata = np.load(fn,allow_pickle=True)
+    except OSError:
+        print("failed to load data")
+        return jsonify({'index':-1,'photo':'failed','record':'failed'})
     if type(rawdata)==list:
         n, img, data = rawdata
     if type(rawdata)==dict:
@@ -63,7 +112,8 @@ def getimage(number,x1,y1,x2,y2):
         img = rawdata['img']
         data = rawdata['record']
     if img is None:
-        return ""
+        print("img = None")
+        return jsonify({'index':-1,'photo':'failed','record':'failed'})
     print(img.shape)       
     steps = int((x2-x1)/500)
     if steps<1: steps = 1
@@ -77,10 +127,10 @@ def getimage(number,x1,y1,x2,y2):
 
 
     print(img.shape)
-    img[int(img.shape[0]/2),:] = 255
-    img[:,int(img.shape[1]/2)] = 255    
+    #img[int(img.shape[0]/2),:] = 255
+    #img[:,int(img.shape[1]/2)] = 255    
     return jsonify({'index':n,'photo':img.tolist(),'record':data})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0")
+    app.run(host="0.0.0.0",port=port)
 
