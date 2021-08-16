@@ -19,9 +19,15 @@ parser.add_argument('--labelfile',required=True,type=str,help='File to save labe
 #parser.add_argument('--initial',required=False,type=int,help='Initial image index')
 parser.add_argument('--port',required=False,type=int,help='Port')
 args = parser.parse_args()
-webbrowser.open("file://" + os.path.realpath('index.html'),new=2)
 
-pathtoimgs = args.imgpath #'/home/mike/Documents/Research/bee/photos2020/photos_June20'
+
+pathtoimgsdir = args.imgpath #'/home/mike/Documents/Research/bee/photos2020/photos_June20'
+
+pathtoimgs = sorted(glob(pathtoimgsdir+'/*/'))
+assert len(pathtoimgs)>0, "Failed to find any folders in the path"
+print("Found the following camera folders:")
+print(pathtoimgs)
+webbrowser.open("file://" + os.path.realpath('index.html'),new=2)
 label_data_file = args.labelfile #"labels_photos_June20.csv"
 if 'port' in args: 
     port = args.port
@@ -29,20 +35,43 @@ else:
     port = 5000
 
 
-def getimgfilename(number):
-    fns = sorted(glob('%s/*.np'%(pathtoimgs)))
+def getimgfilelist(path):
+    return sorted(glob('%s/*.np'%(path)))
+    
+def getimgfilename(cam,number):
+    fns = getimgfilelist(pathtoimgs[cam])
+    if number>=len(fns): return None
     return fns[number]
 
-@app.route('/detect/<int:number>')
-def detect(number):
-    print("---------------------------------")
+def gethash(obj):
+    """
+    Returns a 160 bit integer hash
+    """
+    return int(hashlib.sha1(obj).hexdigest(),16)
+    
+
+@app.route('/detectfromto/<int:cam>/<int:from_idx>/<int:to_idx>')
+def detectall(cam,from_idx,to_idx):
+    for i in range(from_idx,to_idx):
+        detect(cam,i)
+
+import pickle
+import hashlib
+@app.route('/detect/<int:cam>/<int:number>')
+def detect(cam,number):
+    path = pathtoimgs[cam]
+    cachefile = 'detect_cache_%s_%d.pkl' % (gethash(path.encode("utf-8")),number)
+    try:
+        result = pickle.load(open(cachefile,'rb'))
+        print("Cache hit %s" % cachefile)
+        return result
+        
+    except FileNotFoundError:
+        pass
     photo_list = []
-    print(number)
     for n in range(number-10,number+2):
-        print(n)
         if n<0: continue
-        fn = getimgfilename(n)
-        print(fn)
+        fn = getimgfilename(cam,n)
         try:
             photoitem = np.load(fn,allow_pickle=True) 
         except OSError:
@@ -63,15 +92,17 @@ def detect(number):
             c['x']=int(c['x'])
             c['y']=int(c['y'])
             newcontact.append(c)
-    return jsonify({'contact':newcontact, 'found':found})
+    result = jsonify({'contact':newcontact, 'found':found})
+    pickle.dump(result,open(cachefile,'wb'))
+    return result
     
 @app.route('/')
 def hello_world():
     return 'root node of bee label API.'
 
-@app.route('/filename/<int:number>')
-def filename(number):
-    return jsonify(getimgfilename(number))
+@app.route('/filename/<int:cam>/<int:number>')
+def filename(cam,number):
+    return jsonify(getimgfilename(cam,number))
 
 @app.route('/configure/<string:path>')
 def configure(path):
@@ -79,31 +110,28 @@ def configure(path):
     pathtoimgs = path
     return "set new path %s" % path
 
-@app.route('/savepos/<int:number>/<int:x1>/<int:y1>/<int:x2>/<int:y2>')
-def savepos(number,x1,y1,x2,y2):
-    print("==========================")
-    fn = getimgfilename(number)
-    print(number,fn,(x2+x1)/2,(y2+y1)/2)
+@app.route('/savepos/<int:cam>/<int:number>/<int:x1>/<int:y1>/<int:x2>/<int:y2>')
+def savepos(cam,number,x1,y1,x2,y2):
+    fn = getimgfilename(cam,number)
     with open(label_data_file, "a") as labelfile:
         labelfile.write("%d,%s,%d,%d\n" % (number,fn,int((x2+x1)/2),int((y2+y1)/2)))
 
 
     return "done"
     
-@app.route('/getimage/<int:number>/<int:x1>/<int:y1>/<int:x2>/<int:y2>')
-def getimage(number,x1,y1,x2,y2):
+@app.route('/getimage/<int:cam>/<int:number>/<int:x1>/<int:y1>/<int:x2>/<int:y2>')
+def getimage(cam,number,x1,y1,x2,y2):
     global pathtoimgs
-    #print('%s/%04d'%(pathtoimgs,number))  
-    print(x1,y1,x2,y2)
+
     #fns = sorted(glob('%s/*.np'%(pathtoimgs)))
     #if len(fns)==0:
     #    return "Image not found"
-    fn = getimgfilename(number)
-    print(fn)
+    fn = getimgfilename(cam,number)
+
     try:
         rawdata = np.load(fn,allow_pickle=True)
     except OSError:
-        print("failed to load data")
+
         return jsonify({'index':-1,'photo':'failed','record':'failed'})
     if type(rawdata)==list:
         n, img, data = rawdata
@@ -112,21 +140,21 @@ def getimage(number,x1,y1,x2,y2):
         img = rawdata['img']
         data = rawdata['record']
     if img is None:
-        print("img = None")
+
         return jsonify({'index':-1,'photo':'failed','record':'failed'})
-    print(img.shape)       
+
     steps = int((x2-x1)/500)
     if steps<1: steps = 1
     #img = (img.T[x1:x2:steps,y1:y2:steps]).T
 
-    print(steps)
+
     img = (img.T[x1:x2,y1:y2]).T
     k = int(img.shape[0] / steps)
     l = int(img.shape[1] / steps)
     img = img[:k*steps,:l*steps].reshape(k,steps,l,steps).max(axis=(-1,-3))
 
 
-    print(img.shape)
+
     #img[int(img.shape[0]/2),:] = 255
     #img[:,int(img.shape[1]/2)] = 255    
     return jsonify({'index':n,'photo':img.tolist(),'record':data})

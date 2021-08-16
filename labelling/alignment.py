@@ -10,7 +10,14 @@ import pickle
 from scipy import optimize
 from copy import deepcopy
 from scipy.spatial.transform import Rotation as R
+import retrodetect
+import hashlib
 
+
+
+
+
+    
 def grab_photos_in_timerange(path,starttime,endtime):
     """
     Finds all numpy files (with timestamps in) at 'path' location. Avoid
@@ -187,9 +194,139 @@ def getcode(save,im,debug=False,shift=None,thresholds = [1.25,0.75]):
     return ((binaryvals[0])*8 + (binaryvals[1]) * 4 + (binaryvals[8]) * 2 + (binaryvals[9]) * 1), postcoords
 
 
+def gethash(obj):
+    """
+    Returns a 160 bit integer hash
+    """
+    return int(hashlib.sha1(obj).hexdigest(),16)
+    
 
+def pl(bounds,st):
+    print("%s (%0.1f-%0.1f" % (st,bounds[-1][0],bounds[-1][1]))
 
 class Align():
+    def build_observations(self):
+        """
+        Returns a numpy array of observations and their times.
+        Parameters:
+            - grouped_coords = the (time-indexed) dictionary of detected bees.
+            - ignorepatches = a dictionary (indexed by camera) of lists,
+               each element is the image coordinate of a place to ignore. Radius default = 100 pixels.
+            - ignore_radius = 100 default
+        Returns:
+            observations an (Nx7) numpy array. Each row is one detected possible bee:
+               - columns 0:3 = location of 'origin' i.e. camera
+               - columns 3:6 = vector point along the line from the camera to the detected point
+               - column 6 = the score given by the detection algorithm
+            obstimes = (N) numpy array: the times (in seconds) of each detection
+        """
+        observations = []
+        obstimes = []
+        for trigtime in sorted(self.grouped_coords.keys()):
+
+            for obs in self.grouped_coords[trigtime]:
+                if len(self.ignorepatches[obs['cam']])>0:        
+                    if np.min(np.linalg.norm(np.array(self.ignorepatches[obs['cam']])-np.array(obs['imgxy'])[None,:],axis=1))<100: continue
+                #if obs['score']>2: continue
+                obstimes.append(trigtime)
+                origin = obs['origin']
+                vect = obs['vect']
+                vect = vect/np.linalg.norm(vect)
+                observations.append(np.r_[origin,vect,obs['score']])
+        observations = np.array(observations)
+        obstimes = np.array(obstimes)
+        return observations, obstimes
+
+    def compute_retrodectect_coords(self,refresh_cache=False):
+        """
+        Runs the retrodetect tool on the images in the image_filenames list of filenames.
+        Returns a list of potential bees (also stores in class object self.coords). Each item is a dictionary: 
+          triggertime - the time of the photo, 
+          xy - 2 item list of the image coordinates, 
+          score - confidence in the dot
+        More than one item can be returned for an image, conversely,
+        when the algorithm fails to detect any, it won't add any items to
+        the dictionary for the image.    
+        """
+        self.coords = {}
+        for cam,image_fns in self.image_filenames.items():
+            
+            cachefn = "coords_%d.pkl" % gethash((" ".join(image_fns)).encode("utf-8"))
+            if not refresh_cache:
+                try:
+                    print("Trying to load from cache (%s) for camera %s" % (cachefn,cam))
+                    self.coords[cam] = pickle.load(open(cachefn,'rb'))
+                    continue
+                except FileNotFoundError:
+                    print("Cache not found (%s)" % cachefn)  
+                    pass
+            photo_list = []
+            self.coords[cam] = []
+            for fn in image_fns:
+                try:
+                    photoitem = np.load(fn,allow_pickle=True)
+                except OSError:
+                    continue #skip this one if we can't access it
+                if photoitem is not None:
+                    if photoitem['img'] is not None:
+                        photoitem['img'] = photoitem['img'].astype(float)
+                photo_list.append(photoitem)
+                if len(photo_list)>20:
+                    photo_list.pop(0)
+                contact, found, _ = retrodetect.detectcontact(photo_list,len(photo_list)-1,Npatches=20)
+                if contact is not None:
+                    for con in contact:
+                        if con['prediction']<8:
+                            self.coords[cam].append({'triggertime':photo_list[-1]['record']['triggertime'], 'xy':[con['x'],con['y']], 'score':con['prediction']})
+            print("Saving to cache (%s)" % cachefn)
+            pickle.dump(self.coords[cam],open(cachefn,"wb"))
+        return self.coords
+    def build_ignore_patches(self, time_window=2.0,nest_item=None, nest_ignore_radius=200):
+        """Other tagged bees, and other clutter can cause problems, here we are finding items
+        that are probably such items. Ideally we should use some data when our bee-of-interest
+        isn't in the photo. The process here is to find all candidate points for the first
+        time_window seconds of data, and then ignore all detections within 100 pixels of these 
+        points in future. However we don't ignore any point that is within 200px of the nest.
+
+            grouped_coords = a time-indexed dictionary of detections
+            time_window = how many seconds from the start of data collection to use
+            nest_item = if not None, don't ignore an area nest_ignore_radius around the nest location.
+                This should be a string identifying an item in the alignment.newitems dictionary.
+        """
+        if not hasattr(self,'ignorepatches'): self.ignorepatches = {}
+        firsttrigtime = sorted(self.grouped_coords.keys())[0]
+        for trigtime in sorted(self.grouped_coords.keys()):
+            if trigtime>firsttrigtime+time_window: break #first second or two images...
+            for gc in self.grouped_coords[trigtime]:
+                if gc['cam'] not in self.ignorepatches:
+                    self.ignorepatches[gc['cam']] = []
+                if nest_item is not None:
+                    if gc['cam'] in self.newitems[nest_item]['imgcoords']:
+                        nestxy = self.newitems[nest_item]['imgcoords'][gc['cam']]
+                        if (np.linalg.norm(np.array(gc['imgxy'])-np.array(nestxy)[None,:],axis=1))<nest_ignore_radius: continue
+                self.ignorepatches[gc['cam']].append(gc['imgxy'])
+        return self.ignorepatches
+        
+    def process_coords(self):
+        """
+        Combines the resutls from all the cameras into one dictionary, indexed by the time.
+        Each element is a dictionary:
+          - origin = the coordinates of the camera
+          - vect = a vector pointing in the direction of the detected point
+          - score = the score given to the point
+          - imagxy = the position in the image
+          - cam = which camera this is associated with.
+        Returns them grouped (but also stores in class object as self.grouped_coords).    
+        """
+        self.grouped_coords = {}
+        for cam in self.coords: 
+            for j,c in enumerate(self.coords[cam]):
+                if c['triggertime'] not in self.grouped_coords: self.grouped_coords[c['triggertime']] = []
+                coord = c['xy']
+                origin, vect = self.get_vector_pixel(self.newitems[cam],coord)  
+                self.grouped_coords[c['triggertime']].append({'origin':origin,'vect':vect,'score':c['score'],'imgxy':c['xy'],'cam':cam})
+        return self.grouped_coords
+        
     def get_markers(self,image):
         """
         Find the marker posts in the photo.
@@ -298,22 +435,23 @@ class Align():
             - items: a dictionary of items (same as in 'from' and 'to', each with a 'coords' element).
             e.g.:
             {
-                "dists": [
+                "dists": [ <--- rough distance between items
                     {
                         "from": "cam4",
                         "to": "cam1",
                         "dist": 5.8
                     },....
                 ]
-                "items": {
+                "items": { <--- list of items
                         "cam4": {
-                            "height": 1.87,
-                            "angle": 6.31,
-                            "coords": [
+                            "height": 1.87, <--- height above ground
+                            "angle": 6.31, <--- optional, for cameras, rough guess about which way they're facing
+                            "coords": [ <---can be a 3-item list of a coord, or a string pointing to another item's location.
                                 0,
                                 12,
                                 0
                             ]
+                         "imgcoords": {"cam1":[1768.0,1292.0],"cam2":[1242.0, 947.0],... } <--- location of the item in images taken by the cameras.
                         },...
                 }
             }
@@ -323,8 +461,10 @@ class Align():
             - each one has an (ordered) list of filenames for that camera.
         """
         config = json.load(open(config_filename,'r'))
+        self.config_filename = config_filename
         self.dists = config['dists']
         self.items = config['items']
+        self.ignorepatches = config['ignorepatches']
         self.image_filenames = image_filenames
 
     def optimise_positions(self,check_result_threshold=1,allow_random_initialisation=False):
@@ -336,7 +476,6 @@ class Align():
             if 'coords' not in self.items[it]:
                 if not allow_random_initialisation: assert False, "Missing initial coordinate in %s" % it
                 self.items[it]['coords'] = np.random.randn(3)*10
-
         for i in range(1000):
             for d in self.dists:
                 #how much the distance needs to increase to reach target
@@ -350,7 +489,11 @@ class Align():
                 #check that the distances are all ok...
                 if i==999:
                     assert np.abs(d['dist']-lenfromto)<check_result_threshold, "Unable to find consistency in distance data. In particular %s failed (found %0.1f distance)" % (str(d), lenfromto)
-                    
+        for it in self.items:
+            if type(self.items[it]['coords'])==str:
+                #TODO Should probably check if self.items[it]['coords'] is in self.items, and that it has a 'coords' item.
+                self.items[it]['coords'] = deepcopy(self.items[self.items[it]['coords']]['coords'])
+        
     def load_photos_for_alignment(self,flash=False):
         """Loads a photo for each camera (finds ones that either are or aren't flash photos)"""
         
@@ -372,9 +515,12 @@ class Align():
                     if np.mean(img)>mean+0.1:
                         self.cam_photos[photo_fn_idx] = img
                         break
-    def gethash(self,v):
-        """Pass image 'v', returns integer hash"""
-        return int(np.sum((v.astype(float)*(np.arange(0,len(v))[:,None]))+(v.astype(float)*(np.arange(0,v.shape[1])[None,:]))))
+
+        
+    #def gethash(self,v):
+    #    """Pass image 'v', returns integer hash"""
+    #    return int(np.sum((v.astype(float)*(np.arange(0,len(v))[:,None]))+(v.astype(float)*(np.arange(0,v.shape[1])[None,:]))))
+    
 
     def find_markers(self,refresh_cache=False,debug=False,photo_indicies=None):
         """
@@ -390,7 +536,7 @@ class Align():
         if photo_indicies is None:
             photo_indicies = self.cam_photos.keys()
         for photo_idx in photo_indicies:
-            cache_fn = "found_cache_%d.pkl" % self.gethash(self.cam_photos[photo_idx])
+            cache_fn = "found_cache_%d.pkl" % gethash(self.cam_photos[photo_idx])
             try:
                 print("Trying to load from cache (%s)" % cache_fn)
                 if refresh_cache:
@@ -418,7 +564,10 @@ class Align():
 
         
     
-    def draw_found(self,im,found_list,imthresh=30):
+    def draw_found(self,cam,imthresh=30,draw_3d_location=False):
+        im = self.cam_photos[cam]
+        found_list = self.found[cam]
+            
         plt.imshow(im,cmap='gray')
         #imthresh = 30 #np.quantile(im[600:,:],0.95)
         for f in found_list:
@@ -432,7 +581,21 @@ class Align():
             #rect = patches.Rectangle(fnd['coord'], fnd['w'], fnd['h'], linewidth=1, edgecolor=col, facecolor='none')
             #ax.add_patch(rect)
         plt.clim([0,imthresh])
-        #plt.colorbar()
+        for it, v in self.newitems.items():
+            if 'imgcoords' in v:
+                if cam in v['imgcoords']:
+                    plt.plot(v['imgcoords'][cam][0],v['imgcoords'][cam][1],'xy',markersize=20)
+                    plt.text(v['imgcoords'][cam][0],v['imgcoords'][cam][1],it,color='yellow')        
+        if draw_3d_location:
+            for it in self.newitems:
+                imgxy = self.get_pixel_loc(self.newitems[cam],self.newitems[it]['coords'])
+                if (imgxy[0,0]>0) and (imgxy[0,0]<2048) and (imgxy[0,1]>0) and (imgxy[0,1]<2048*0.75):
+                    plt.plot(imgxy[0,0],imgxy[0,1],'b+',markersize=30,mew=3)
+                    plt.text(imgxy[0,0],imgxy[0,1],it,color='b')
+                    if 'imgcoords' in self.newitems[it]:
+                        if (cam in self.newitems[it]['imgcoords']):
+                            knownxy = self.newitems[it]['imgcoords'][cam]
+                            plt.plot(knownxy[0],knownxy[1],'yx')
     
     def tryangle(self,params,cam):
         a = params[0]
@@ -469,9 +632,21 @@ class Align():
         self.fov = np.median(fovs)
         return self.fov, ret
 
-    
-    def get_pixel_loc(self, cam, marker):
-        p = np.array(marker['coords'] - cam['coords'])
+    def get_pixel_loc(self, cam, markercoords):
+        p = np.array(markercoords - cam['coords'])
+        r1 = R.from_euler('z', -cam['angle'], degrees=False) #yaw
+        r2 = R.from_euler('Y', -cam['pitch'], degrees=False) #pitch (intrinsic rotation around y axis)    
+        r3 = R.from_euler('X', -cam['roll'], degrees=False) #roll (intrinsic rotation around x axis)    
+
+        pvec = r3.apply(r2.apply(r1.apply(p)))
+        if len(pvec.shape)==1:
+            pvec = pvec[None,:]
+        res = np.array([1024+1024*(-pvec[:,1]/pvec[:,0])/self.hfovw,(1024+1024*(pvec[:,2]/pvec[:,0]/self.vfovw))*0.75]).T
+        #assert np.all(np.array(self.old_get_pixel_loc(cam,markercoords))==res)
+        return res
+        
+    def old_get_pixel_loc(self, cam, markercoords):
+        p = np.array(markercoords - cam['coords'])
         r1 = R.from_euler('z', -cam['angle'], degrees=False) #yaw
         r2 = R.from_euler('Y', -cam['pitch'], degrees=False) #pitch (intrinsic rotation around y axis)    
         r3 = R.from_euler('X', -cam['roll'], degrees=False) #roll (intrinsic rotation around x axis)    
@@ -496,7 +671,13 @@ class Align():
     
     
 
-    def compute_error(self,params):
+    def compute_error(self,params,findworst=False):
+        """
+        Using the values in params, assign new coords etc to the newitems,
+        then compute the sum squared error of their locations when 'rendered' back to the camera images.
+        
+        If findworst is set to true, it returns the distance of the least accurate fit.
+        """
         err = 0
         i=0
         self.fov = params[i]
@@ -538,13 +719,16 @@ class Align():
         for n in self.newitems:
             if 'imgcoords' not in self.newitems[n]: continue
             for cam in self.newitems[n]['imgcoords']:
-                pred_pos = self.get_pixel_loc(self.newitems[cam],self.newitems[n])
+                pred_pos = self.get_pixel_loc(self.newitems[cam],self.newitems[n]['coords'])
                 act_pos = self.newitems[n]['imgcoords'][cam]
                 if 'weight' in self.newitems[n]: 
                     w = self.newitems[n]['weight']
                 else:
                     w = 1.0
-                err += w * np.sum((np.array(pred_pos)-np.array(act_pos))**2)
+                if findworst:
+                    err = max(err,np.sqrt(np.sum((np.array(pred_pos)-np.array(act_pos))**2)))
+                else:
+                    err += w * np.sum((np.array(pred_pos)-np.array(act_pos))**2)
         return err
 
 
@@ -572,7 +756,7 @@ class Align():
             if it[:3]=='cam':
                 self.newitems[it]['pitch'] = 0  
                       
-    def generate_alignment(self,maxiters = 1000):
+    def generate_alignment(self,maxiters = 1000,refresh_cache=False,printlabels=False):
         """
         Try to find best positions and orientations of markers and cameras
         """
@@ -580,9 +764,23 @@ class Align():
         self.hfovw = np.tan(self.fov/2)
         self.vfovw = np.tan(0.75*self.fov/2)
 
+        cachefn = "camera_alignment_cache_%d.pkl" % gethash(self.config_filename.encode("utf-8"))
+        if not refresh_cache:
+            try:
+                print("Trying to load from cache (%s)" % cachefn)
+                optx = pickle.load(open(cachefn,'rb'))
+                worst = self.compute_error(optx,findworst=True) #updates parameters to this optimum result
+                print("Worst position %d pixels away." % int(worst))
+                return optx
+            except FileNotFoundError:            
+                print("Cache not found (%s)" % cachefn)                
+                pass
+
         bounds = []
         
-        bounds.append([self.fov-0.2,self.fov+0.2])
+        bounds.append([self.fov-0.4,self.fov+0.4])
+
+        if printlabels: pl(bounds,"fov")
         
         for n in self.newitems:
             adjustpos = False
@@ -594,25 +792,74 @@ class Align():
                 
                 if n[-6:]=='bottom':
                     bounds.append([-0.1,0.1])
+                    if printlabels: print(n+"x",end=", ")
                     bounds.append([-0.1,0.1])
+                    if printlabels: print(n+"y",end=", ")                    
                 else:
                     if 'bounds' in self.newitems[n]:
                         bounds.append([self.newitems[n]['coords'][0]-self.newitems[n]['bounds'],self.newitems[n]['coords'][0]+self.newitems[n]['bounds']])
+                        if printlabels: pl(bounds,n+"x")
                         bounds.append([self.newitems[n]['coords'][1]-self.newitems[n]['bounds'],self.newitems[n]['coords'][1]+self.newitems[n]['bounds']])
+                        if printlabels: pl(bounds,n+"y")
                         bounds.append([-2,2]) #move up or down by 1.5m
+                        if printlabels: pl(bounds,n+"z")
                     else:                                                
                         bounds.append([self.newitems[n]['coords'][0]-1,self.newitems[n]['coords'][0]+1])
+                        if printlabels: pl(bounds,n+"x")
                         bounds.append([self.newitems[n]['coords'][1]-1,self.newitems[n]['coords'][1]+1])
+                        if printlabels: pl(bounds,n+"y")
                         bounds.append([-2,2]) #move up or down by 1.5m
+                        if printlabels: pl(bounds,n+"z")
 
 
 
 
             if n[:3]=='cam':
                 bounds.append([-0.1,0.1]) #roll (limited)
+                if printlabels: pl(bounds,"roll")
                 bounds.append([-0.5,0.2]) #pitch (mostly pitch down I think?)
+                if printlabels: pl(bounds,"pitch")
                 bounds.append([self.items[n]['angle']-1.5,self.items[n]['angle']+1.5])
+                if printlabels: pl(bounds,"yaw")
         len(bounds)
 
-        opt = optimize.minimize(self.compute_error,np.zeros(len(bounds)),bounds=bounds,options={'maxiter':maxiters},callback=lambda x: print(self.compute_error(x)))
-        return opt
+#        opt = optimize.minimize(self.compute_error,np.zeros(len(bounds)),bounds=bounds,options={'maxiter':maxiters},callback=lambda x: print("%d" % int(self.compute_error(x)),end=", "))
+        opt = optimize.minimize(self.compute_error,np.mean(np.array(bounds),1),bounds=bounds,options={'maxiter':maxiters},callback=lambda x: print(".",end="")) #,callback=lambda x: print(x)) #print("%d" % int(self.compute_error(x)),end=", "))
+        print(" ")
+        print("Saving to cache (%s)" % cachefn)
+        worst = self.compute_error(opt['x'],findworst=True) #updates parameters to this optimum result
+        print("Worst position %d pixels away." % int(worst))
+        pickle.dump(opt['x'],open(cachefn,'wb'))
+        return opt['x']
+        
+    def draw_path_on_photos(self,obstimes,strajs,camid):
+        """
+        Draw the path on the photos from our alignment.
+        Mean path = blue line
+        Standard deviation = yellow circles.
+        Time = yellow numbers (seconds)
+        """
+        photo = self.cam_photos[camid]
+        meanpath = np.mean(strajs,1)
+        plt.imshow(photo,cmap='gray')
+        plt.clim([0,15])
+
+        mp_pixels =self.get_pixel_loc(self.newitems[camid],meanpath)
+
+        keep = []
+        for i,mp in enumerate(mp_pixels[:-1]):
+
+            particle_pixels = self.get_pixel_loc(self.newitems[camid],strajs[i+1,:,:])
+            partstd = np.mean(np.std(particle_pixels,0)) 
+            if partstd>100: continue
+            keep.append(mp_pixels[i,:])
+            plt.plot(mp_pixels[i:(i+2),0],mp_pixels[i:(i+2),1],'b-x',lw=(200/partstd)-1)
+            if i%5 ==0:
+                plt.text(mp[0],mp[1],"%0.1f" % (obstimes[i]-obstimes[0]),color='yellow',fontsize=20)
+                plt.gca().add_artist(plt.Circle(mp, partstd,fill=False,color='y'))
+     
+        nestxy = self.newitems['nestfrontleft']['imgcoords'][camid]    
+        keep = np.array(keep)
+        margin = 250
+        plt.xlim([np.min(keep,0)[0]-margin,np.max(keep,0)[0]+margin])
+        plt.ylim([np.max(keep,0)[1]+margin,np.min(keep,0)[1]-margin])        
