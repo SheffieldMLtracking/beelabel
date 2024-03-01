@@ -47,7 +47,7 @@ def rotate_image(image, angle):
     return result
 
 
-def getcode(save, im, debug=False, shift=None, thresholds=[1.5, 0.6]):
+def getcode(save, im, debug=False, shift=None, thresholds=(1.5, 0.6)):
     """
     Reads the code from a post in the image, using the config in 'save'.
     save should be a dictionary containing:
@@ -207,7 +207,7 @@ def gethash(obj):
     return int(hashlib.sha1(obj).hexdigest(), 16)
 
 
-class Align():
+class Align:
     def build_observations(self):
         """
         Returns a numpy array of observations and their times.
@@ -229,7 +229,7 @@ class Align():
         for trigtime in sorted(self.grouped_coords.keys()):
             for obs in self.grouped_coords[trigtime]:
                 if hasattr(self, 'ignorepatches'):
-                    if obs['cam'] in ignorepatches:
+                    if obs['cam'] in self.ignorepatches:
                         if len(self.ignorepatches[obs['cam']]) > 0:
                             if np.min(np.linalg.norm(
                                     np.array(self.ignorepatches[obs['cam']]) - np.array(obs['imgxy'])[None, :],
