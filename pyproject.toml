@@ -1,0 +1,54 @@
+# Python package
+# This file defines this repositroy as a Python package for distribution.
+
+# For more information on packaging:
+# https://packaging.python.org/
+# https://packaging.python.org/en/latest/guides/writing-pyproject-toml
+# https://packaging.python.org/en/latest/tutorials/packaging-projects/
+
+# Build backend options
+[build-system]
+# https://setuptools.pypa.io/en/latest/
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+# Package metadata
+# https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#basic-information
+[project]
+name = "beelabel"
+description = "3D flight path inference using bee tracking images with retroreflection detection methods."
+readme = "README.md"
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#dynamic-metadata
+dynamic = ["version"]
+requires-python = ">= 3.8"
+dependencies = [
+    "numpy==1.*"
+]
+authors = [
+    { name = "Michael Smith", email = "m.t.smith@sheffield.ac.uk" },
+]
+maintainers = [
+    { name = "Michael Smith", email = "m.t.smith@sheffield.ac.uk" },
+    { name = "Joe Heffer", email = "j.heffer@sheffield.ac.uk" },
+]
+license = { file = "LICENSE" }
+keywords = ["bee tracking"]
+
+# PyPI classifiers
+# https://pypi.org/classifiers/
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.urls]
+Homepage = "https://www.sheffield.ac.uk/dcs/people/academic/michael-smith"
+Repository = "https://github.com/SheffieldMLtracking/beelabel"
+Issues = "https://github.com/SheffieldMLtracking/beelabel/issues"
+Changelog = "https://github.com/SheffieldMLtracking/beelabel/releases"
+Documentation = "https://github.com/SheffieldMLtracking"
