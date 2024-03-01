@@ -1,6 +1,10 @@
 # Python package
-# https://packaging.python.org/en/latest/
+# This file defines this repositroy as a Python package for distribution.
+
+# For more information on packaging:
+# https://packaging.python.org/
 # https://packaging.python.org/en/latest/guides/writing-pyproject-toml
+# https://packaging.python.org/en/latest/tutorials/packaging-projects/
 
 # Build backend options
 [build-system]
@@ -14,6 +18,7 @@ build-backend = "setuptools.build_meta"
 name = "beelabel"
 description = "3D flight path inference using bee tracking images with retroreflection detection methods."
 readme = "README.md"
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#dynamic-metadata
 dynamic = ["version"]
 requires-python = ">= 3.8"
 dependencies = [
