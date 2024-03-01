@@ -105,7 +105,7 @@ def draw_3d_path(strajs, draw_uncertainty=False, extent=[[5, 20], [-2, -2 + 15],
                 for posx, posy, posz in zip(
                         *[np.linspace(qstart[i], qend[i], int(10 * np.linalg.norm(qend - qstart))) for i in range(3)]):
                     volcoord = ((np.array([posx, posy, posz]) - np.array(extent)[:, 0]) * (
-                                volumeresolution / (extent[0][1] - extent[0][0]))).astype(int)
+                            volumeresolution / (extent[0][1] - extent[0][0]))).astype(int)
                     if np.any(volcoord < 0): continue
                     if np.any(volcoord >= volumeresolution): continue
                     drawvol[volcoord[0], volcoord[1], volcoord[2]] += 1

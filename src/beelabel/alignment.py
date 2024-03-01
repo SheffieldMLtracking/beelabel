@@ -101,14 +101,14 @@ def getcode(save, im, debug=False, shift=None, thresholds=[1.5, 0.6]):
         stepreq = (np.max(readout) - np.min(readout)) / 5
         first_fall_in_search_pattern = np.where(((readout[3:] - readout[:-3]) < -stepreq)[17:])[0][0] + 17
         first_rise_in_search_pattern = \
-        np.where(((readout[3:] - readout[:-3]) > stepreq)[first_fall_in_search_pattern:])[0][
-            0] + first_fall_in_search_pattern
+            np.where(((readout[3:] - readout[:-3]) > stepreq)[first_fall_in_search_pattern:])[0][
+                0] + first_fall_in_search_pattern
         second_fall_in_search_pattern = \
-        np.where(((readout[3:] - readout[:-3]) < -stepreq)[first_rise_in_search_pattern:])[0][
-            0] + first_rise_in_search_pattern
+            np.where(((readout[3:] - readout[:-3]) < -stepreq)[first_rise_in_search_pattern:])[0][
+                0] + first_rise_in_search_pattern
         second_rise_in_search_pattern = \
-        np.where(((readout[3:] - readout[:-3]) > stepreq)[second_fall_in_search_pattern:])[0][
-            0] + second_fall_in_search_pattern
+            np.where(((readout[3:] - readout[:-3]) > stepreq)[second_fall_in_search_pattern:])[0][
+                0] + second_fall_in_search_pattern
 
         if debug:
             print(first_fall_in_search_pattern, first_rise_in_search_pattern, second_fall_in_search_pattern,
@@ -232,8 +232,8 @@ class Align():
                     if obs['cam'] in ignorepatches:
                         if len(self.ignorepatches[obs['cam']]) > 0:
                             if np.min(np.linalg.norm(
-                                np.array(self.ignorepatches[obs['cam']]) - np.array(obs['imgxy'])[None, :],
-                                axis=1)) < 100: continue
+                                    np.array(self.ignorepatches[obs['cam']]) - np.array(obs['imgxy'])[None, :],
+                                    axis=1)) < 100: continue
                 # if obs['score']>2: continue
                 obstimes.append(trigtime)
                 origin = obs['origin']
@@ -511,7 +511,7 @@ class Align():
                 if i == 999:
                     assert np.abs(d[
                                       'dist'] - lenfromto) < check_result_threshold, "Unable to find consistency in distance data. In particular %s failed (found %0.1f distance)" % (
-                    str(d), lenfromto)
+                        str(d), lenfromto)
         for it in self.items:
             if type(self.items[it]['coords']) == str:
                 # TODO Should probably check if self.items[it]['coords'] is in self.items, and that it has a 'coords' item.
