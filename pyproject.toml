@@ -19,7 +19,10 @@ requires-python = ">= 3.8"
 dependencies = [
     "numpy==1.*",
     "scipy==1.*",
-    "matplotlib==3.*"
+    "matplotlib==3.*",
+    "opencv-python==4.*",
+    "particles==0.*",
+    ""
 ]
 authors = [
     { name = "Michael Smith", email = "m.t.smith@sheffield.ac.uk" },

@@ -88,10 +88,8 @@ class BeeTrajectoryNoVelocity(ssm.StateSpaceModel):
         return TrajectoryDist(loc=x[:, :3], scale=0.3)
 
 
-import ipyvolume as ipv
-
-
 def draw_3d_path(strajs, draw_uncertainty=False, extent=[[5, 20], [-2, -2 + 15], [-4, -4 + 15]]):
+    import ipyvolume as ipv
     ipv.clear()
     meanpath = np.mean(strajs, 1)
     ipv.plot(meanpath[:, 0], meanpath[:, 1], meanpath[:, 2])

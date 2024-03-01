@@ -14,7 +14,7 @@ import retrodetect
 import hashlib
 
 
-def grab_photos_in_timerange(path, starttime, endtime):
+def grab_photos_in_timerange(path, starttime, endtime) -> list[str]:
     """
     Finds all numpy files (with timestamps in) at 'path' location. Avoid
     trailing / in this parameter.
@@ -27,13 +27,18 @@ def grab_photos_in_timerange(path, starttime, endtime):
     Example:
         grab_photos_in_timerange('photos/system001','08:00:00','08:10:00')
     """
-    if type(starttime) == str: starttime = time.strptime(starttime, '%H:%M:%S')
-    if type(endtime) == str: endtime = time.strptime(endtime, '%H:%M:%S')
-    output = []
+    if type(starttime) == str:
+        starttime = time.strptime(starttime, '%H:%M:%S')
+    if type(endtime) == str:
+        endtime = time.strptime(endtime, '%H:%M:%S')
+    output = list()
+
+    # Iterate over file paths
     fs = sorted(glob.glob(path + '/*.np'))
     for f in fs:
         fnd = re.findall('[0-9]*:[0-9]*:[0-9]*', f)
-        if len(fnd) != 1: continue
+        if len(fnd) != 1:
+            continue
         t = time.strptime(fnd[0], '%H:%M:%S')
         if (t >= starttime) & (t <= endtime):
             output.append(f)
