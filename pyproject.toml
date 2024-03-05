@@ -52,3 +52,8 @@ Repository = "https://github.com/SheffieldMLtracking/beelabel"
 Issues = "https://github.com/SheffieldMLtracking/beelabel/issues"
 Changelog = "https://github.com/SheffieldMLtracking/beelabel/releases"
 Documentation = "https://github.com/SheffieldMLtracking"
+
+# https://docs.pytest.org/en/7.1.x/reference/customize.html#pyproject-toml
+[tool.pytest.ini_options]
+# https://docs.python.org/3/using/cmdline.html#envvar-PYTHONPATH
+pythonpath = ["src"]
