@@ -1,4 +1,4 @@
-![Automatic tests](https://github.com/SheffieldMLtracking/beelabel/actions/workflows/python-package/badge.svg)
+![Automatic tests](https://github.com/SheffieldMLtracking/beelabel/actions/workflows/python-package.yml/badge.svg)
 
 # Bee labelling
 
