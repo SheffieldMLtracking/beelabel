@@ -21,8 +21,7 @@ dependencies = [
     "scipy==1.*",
     "matplotlib==3.*",
     "opencv-python==4.*",
-    "particles==0.*",
-    ""
+    "particles==0.*"
 ]
 authors = [
     { name = "Michael Smith", email = "m.t.smith@sheffield.ac.uk" },
