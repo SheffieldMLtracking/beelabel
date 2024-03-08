@@ -80,7 +80,7 @@ jobs:
     # https://test.pypi.org/manage/project/beelabel/settings/publishing/
     environment:
       name: testpypi
-      url: https://test.pypi.org/project/beelabel/
+      url: https://test.pypi.org/p/beelabel/
     permissions:
       # IMPORTANT: mandatory for trusted publishing
       id-token: write
@@ -90,5 +90,8 @@ jobs:
         with:
           name: python-package-distributions
           path: dist/
+      # https://github.com/marketplace/actions/pypi-publish
       - name: Publish distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
