@@ -73,7 +73,7 @@ jobs:
   # OpenID Connect token that the pypi-publish actions needs to implement secretless trusted publishing to PyPI
   # https://docs.pypi.org/trusted-publishers/
   publish-to-test-pypi:
-    name: Publish Python distribution to test PyPI
+    name: Publish test PyPI
     needs:
       - build
     runs-on: ubuntu-22.04
@@ -95,3 +95,16 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+
+  publish-to-pypi:
+    name: Publish to PyPI
+    # # only publish to PyPI on tag pushes
+    if: startsWith(github.ref, 'refs/tags/')
+    needs:
+      - publish-to-test-pypi
+    runs-on: ubuntu-22.04
+    environment:
+      name: pypi
+      url: https://pypi.org/p/beelabel/
+    permissions:
+      id-token: write
