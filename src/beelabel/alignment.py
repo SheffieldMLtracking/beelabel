@@ -12,9 +12,12 @@ from copy import deepcopy
 from scipy.spatial.transform import Rotation as R
 import retrodetect
 import hashlib
+from typing import Union
+
+TimeOfDay = Union[str, time.struct_time]
 
 
-def grab_photos_in_timerange(path, starttime, endtime) -> list[str]:
+def grab_photos_in_timerange(path: str, starttime: TimeOfDay, endtime: TimeOfDay) -> list[str]:
     """
     Finds all numpy files (with timestamps in) at 'path' location. Avoid
     trailing / in this parameter.
@@ -27,9 +30,9 @@ def grab_photos_in_timerange(path, starttime, endtime) -> list[str]:
     Example:
         grab_photos_in_timerange('photos/system001','08:00:00','08:10:00')
     """
-    if type(starttime) == str:
+    if isinstance(starttime, str):
         starttime = time.strptime(starttime, '%H:%M:%S')
-    if type(endtime) == str:
+    if isinstance(endtime, str):
         endtime = time.strptime(endtime, '%H:%M:%S')
     output = list()
 
