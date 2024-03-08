@@ -14,6 +14,7 @@ build-backend = "setuptools.build_meta"
 name = "beelabel"
 description = "3D flight path inference using bee tracking images with retroreflection detection methods."
 readme = "README.md"
+# https://packaging.python.org/en/latest/guides/single-sourcing-package-version/
 dynamic = ["version"]
 requires-python = ">= 3.8"
 dependencies = [
@@ -44,6 +45,9 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
+
+[tool.setuptools.dynamic]
+version = {attr = "beelabel.__version__"}
 
 # https://peps.python.org/pep-0631/
 [project.optional-dependencies]
