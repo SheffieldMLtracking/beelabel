@@ -5,18 +5,13 @@
 # Workflow syntax for GitHub Actions
 # https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions
 
+# This workflow was designed based on this guide:
 # Publishing package distribution releases using GitHub Actions CI/CD workflows
 # https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
 
 # See:"Building and Publishing" on the Python Packaging User Guide
 # https://packaging.python.org/en/latest/guides/section-build-and-publish/
 
-# This workflow was designed based on this guide:
-# Publishing package distribution releases using GitHub Actions CI/CD workflows
-# https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
-
-# It runs whenever we publish a new release.
-# https://docs.github.com/en/repositories/releasing-projects-on-github
 on: push
 name: Python package
 jobs:
@@ -50,6 +45,9 @@ jobs:
         run: |
           pytest
 
+  # It runs whenever we publish a new release.
+  # https://docs.github.com/en/repositories/releasing-projects-on-github
+
   build:
     name: Build distribution
     runs-on: ubuntu-22.04
@@ -72,13 +70,16 @@ jobs:
           name: python-package-distributions
           path: dist/
 
+  # OpenID Connect token that the pypi-publish actions needs to implement secretless trusted publishing to PyPI
+  # https://docs.pypi.org/trusted-publishers/
   publish-to-test-pypi:
     name: Publish Python distribution to test PyPI
     needs:
       - build
     runs-on: ubuntu-22.04
+    # https://test.pypi.org/manage/project/beelabel/settings/publishing/
     environment:
-      name: development
+      name: testpypi
       url: https://test.pypi.org/project/beelabel/
     permissions:
       # IMPORTANT: mandatory for trusted publishing
