@@ -95,6 +95,9 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+          # Don't complain on repeat uploads for the same package version
+          # https://github.com/marketplace/actions/pypi-publish#tolerating-release-package-file-duplicates
+          skip-existing: true
 
   publish-to-pypi:
     name: Publish to PyPI
