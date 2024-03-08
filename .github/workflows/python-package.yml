@@ -13,12 +13,13 @@ on: [push, pull_request]
 
 jobs:
   build:
-
-    runs-on: ["ubuntu-2022"]
+    # https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners
+    runs-on: ["ubuntu-22.04"]
     strategy:
       fail-fast: true
       matrix:
-        python-version: ["3.12"]
+        # https://devguide.python.org/versions/
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
     - uses: actions/checkout@v4
